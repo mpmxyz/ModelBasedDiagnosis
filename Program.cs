@@ -98,9 +98,11 @@ Console.Write("Select your test: ");
 switch(Console.ReadLine())
 {
     case "0":
+        Console.WriteLine("m1, m2, m3, a1, a2");
         solutions = Solver.Execute([AdderMultiplierExample]);
         break;
     case "1":
+        Console.WriteLine("c1, s1, c2, c3, s2, c4, l, c5");
         solutions = Solver.Execute([
             () => AssignmentCircuit(false, false, false),
             () => AssignmentCircuit(true, false, false),
