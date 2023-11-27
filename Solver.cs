@@ -12,7 +12,7 @@
             }
         }
 
-        public static IEnumerable<(uint[], IEnumerable<Graph>)> Execute(IEnumerable<Func<Graph>> graphGenerators)
+        public static IEnumerable<(uint[], IEnumerable<Graph>)> Execute(IEnumerable<Func<Graph>> graphGenerators, int maxCount = int.MaxValue)
         {
             var initialGraph = graphGenerators.First()();
             var variantsQueue = new VariantsQueue(initialGraph);
@@ -38,6 +38,10 @@
                 if (valid)
                 {
                     result.Add((variants, graphs));
+                    if (result.Count >= maxCount)
+                    {
+                        break;
+                    }
                 }
                 else
                 {

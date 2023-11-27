@@ -87,7 +87,7 @@ static Graph SwitchTest()
     return new Graph([a, bTrue, bFalse, state], [s]);
 }
 
-IEnumerable<(uint[], IEnumerable<Graph>)> solutions;
+IEnumerable<Func<Graph>> graphGenerators;
 
 Console.WriteLine("0: AdderMultiplier (Assignment 6.1)");
 Console.WriteLine("1: Electric Circuit (Assignment 6.3)");
@@ -99,29 +99,37 @@ switch(Console.ReadLine())
 {
     case "0":
         Console.WriteLine("m1, m2, m3, a1, a2");
-        solutions = Solver.Execute([AdderMultiplierExample]);
+        graphGenerators = [AdderMultiplierExample];
         break;
     case "1":
         Console.WriteLine("c1, s1, c2, c3, s2, c4, l, c5");
-        solutions = Solver.Execute([
+        graphGenerators = [
             () => AssignmentCircuit(false, false, false),
             () => AssignmentCircuit(true, false, false),
             () => AssignmentCircuit(true, true, true)
-        ]);
+        ];
         break;
     case "2":
-        solutions = Solver.Execute([WireTest]);
+        graphGenerators = [WireTest];
         break;
     case "3":
-        solutions = Solver.Execute([LampTest]);
+        graphGenerators = [LampTest];
         break;
     case "4":
-        solutions = Solver.Execute([SwitchTest]);
+        graphGenerators = [SwitchTest];
         break;
     default:
         return;
 }
 
+var stopwatch = new System.Diagnostics.Stopwatch();
+stopwatch.Start();
+var solutions = Solver.Execute(graphGenerators, maxCount: 5);
+stopwatch.Stop();
+
+Console.WriteLine($"Runtime: {stopwatch.ElapsedMilliseconds}ms");
+Console.WriteLine($"Showing {solutions.Count()}/{Solver.Execute(graphGenerators)
+.Count()} solutions");
 foreach ((var variants, var graphs) in solutions)
 {
     Console.WriteLine(string.Join(", ", variants) + " => " + graphs.First().Likelyhood(variants));
