@@ -38,7 +38,7 @@ namespace AAI6
         private readonly Graph templateGraph;
         private readonly PriorityQueue<uint[], (uint[], float)> queue = new(new VariantsComparer());
         private readonly HashSet<uint[]> knownVariants = new(variantsEqualityComparer);
-        private readonly HashSet<uint[]> suppressedByPreferred = new(variantsEqualityComparer);
+        private readonly List<uint[]> allPreferred = [];
 
         public VariantsQueue(Graph initialGraph)
         {
@@ -55,13 +55,7 @@ namespace AAI6
         /// <param name="preferred">preferred (and necessarily conflict free!) variants</param>
         public void AddPreferred(uint[] preferred)
         {
-            for (int i = 0; i < preferred.Length; i++)
-            {
-                var suppressed = (uint[]) preferred.Clone();
-                suppressed[i]++;
-                suppressedByPreferred.Add(suppressed);
-                //TODO: does suppression persist through layer of conflict when it neighbors a parallel conflict?
-            }
+            allPreferred.Add(preferred);
         }
 
         public void Enqueue(uint[] variants)
@@ -111,15 +105,17 @@ namespace AAI6
 
         private void DequeueNonPreferred() {
             int x = 0;
-            while (queue.Count > 0 && suppressedByPreferred.Contains(queue.Peek()))
+            while (queue.Count > 0 && IsSuppressed(queue.Peek()))
             {
                 //Console.WriteLine($"suppressed {string.Join(", ", queue.Peek())}");
                 //make sure that decendants are also non-preferred
-                AddPreferred(queue.Dequeue());
-                x++;
-                Console.CursorLeft = 0;
-                Console.Write($"{x}");
+                queue.Dequeue();
             }
+        }
+
+        private bool IsSuppressed(uint[] variants)
+        {
+            return allPreferred.Any(preferredVariants => VariantsComparer.CompareVariants(preferredVariants, variants) < 0);
         }
     }
 }
