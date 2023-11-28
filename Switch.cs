@@ -4,7 +4,8 @@
         IValue<Voltage> a,
         IValue<Voltage> bTrue,
         IValue<Voltage> bFalse,
-        IValue<bool> state
+        IValue<bool> state,
+        string name = ""
     ) : IComponent
     {
         private readonly IValue<Voltage> a = a;
@@ -16,11 +17,13 @@
 
         public uint VariantCount => 4;
 
+        public string Name { get; } = name;
+
         public Result Apply(uint variant)
         {
             Voltage vA, vBTrue, vBFalse;
             bool vState;
-            Result result = Result.NOOP;
+            Result result = Result.Noop.Instance;
             switch (variant)
             {
                 case 0:
@@ -30,22 +33,22 @@
                         {
                             if (a.TryGet(out vA))
                             {
-                                result = result.CombineWith(bTrue.TrySet(vA));
+                                result = result.CombineWith(bTrue.TrySet(vA, ([state, a], this)));
                             }
                             if (bTrue.TryGet(out vBTrue))
                             {
-                                result = result.CombineWith(a.TrySet(vBTrue));
+                                result = result.CombineWith(a.TrySet(vBTrue, ([state, bTrue], this)));
                             }
                         }
                         else
                         {
                             if (a.TryGet(out vA))
                             {
-                                result = result.CombineWith(bFalse.TrySet(vA));
+                                result = result.CombineWith(bFalse.TrySet(vA, ([state, a], this)));
                             }
                             if (bFalse.TryGet(out vBFalse))
                             {
-                                result = result.CombineWith(a.TrySet(vBFalse));
+                                result = result.CombineWith(a.TrySet(vBFalse, ([state, bFalse], this)));
                             }
                         }
                     }
@@ -53,13 +56,13 @@
                     {
                         if (bTrue.TryGet(out vBTrue) && bFalse.TryGet(out vBFalse) && vBTrue == vBFalse)
                         {
-                            result = result.CombineWith(a.TrySet(vBTrue));
+                            result = result.CombineWith(a.TrySet(vBTrue, ([bTrue, bFalse], this)));
                         }
                         if (a.TryGet(out vA) && bTrue.TryGet(out vBTrue) && bFalse.TryGet(out vBFalse))
                         {
                             if (vBTrue != vBFalse)
                             {
-                                result = result.CombineWith(state.TrySet(vA == vBTrue));
+                                result = result.CombineWith(state.TrySet(vA == vBTrue, ([a, bTrue, bFalse], this)));
                             }
                         }
                     }
@@ -67,21 +70,21 @@
                 case 1:
                     if (a.TryGet(out vA))
                     {
-                        result = result.CombineWith(bTrue.TrySet(vA));
+                        result = result.CombineWith(bTrue.TrySet(vA, ([a], this)));
                     }
                     if (bTrue.TryGet(out vBTrue))
                     {
-                        result = result.CombineWith(a.TrySet(vBTrue));
+                        result = result.CombineWith(a.TrySet(vBTrue, ([bTrue], this)));
                     }
                     break;
                 case 2:
                     if (a.TryGet(out vA))
                     {
-                        result = result.CombineWith(bTrue.TrySet(vA));
+                        result = result.CombineWith(bTrue.TrySet(vA, ([a], this)));
                     }
                     if (bFalse.TryGet(out vBFalse))
                     {
-                        result = result.CombineWith(a.TrySet(vBFalse));
+                        result = result.CombineWith(a.TrySet(vBFalse, ([bFalse], this)));
                     }
                     break;
                 case 3:

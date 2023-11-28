@@ -1,4 +1,5 @@
 ﻿using AAI6;
+using System;
 
 static Graph AdderMultiplierExample()
 {
@@ -43,7 +44,7 @@ static Graph AssignmentCircuit(bool switch1, bool switch2, bool lamp)
     var lPlus = new Value<Voltage>(name: "lPlus");
     var lLit = new Value<bool>(lamp, name: "lLit");
     var lMinus = new Value<Voltage>(name: "lMinus");
-    var bMinus = new Value<Voltage>(Voltage.MINUS, name: "bMinus");
+    var bMinus = new Value<Voltage>(Voltage.GROUND, name: "bMinus");
 
     var c1 = new Wire(bPlus, s1a);
     var s1 = new Switch(s1a, s1bTrue, s1bFalse, s1state);
@@ -64,7 +65,7 @@ static Graph LampTest()
 {
     var lPlus = new Value<Voltage>(Voltage.PLUS);
     var lLit = new Value<bool>(false);
-    var lMinus = new Value<Voltage>(Voltage.MINUS);
+    var lMinus = new Value<Voltage>(Voltage.GROUND);
     var l = new Lamp(lPlus, lMinus, lLit);
     return new Graph([lPlus, lLit, lMinus], [l]);
 }
@@ -87,6 +88,54 @@ static Graph SwitchTest()
     return new Graph([a, bTrue, bFalse, state], [s]);
 }
 
+static Graph BigTest(
+    int nWireSegments = 10,
+    int nLines = 10,
+    int nLit = 5
+)
+{
+    
+
+    var wires = new Wire[nWireSegments, nLines];
+    var lamps = new Lamp[nLines];
+
+    var lamps_lit = new Value<bool>[nLines];
+    var lampWireVoltages = new Value<Voltage>[nWireSegments, nLines];
+
+    int iValue = 0;
+    var allValues = new IValue[2 + lamps_lit.Length + lampWireVoltages.Length];
+    int iComponent = 0;
+    var allComponents = new IComponent[wires.Length + lamps.Length];
+
+    var batP = new Value<Voltage>(Voltage.PLUS, name: "batP");
+    var batM = new Value<Voltage>(Voltage.GROUND, name: "batM");
+    allValues[iValue++] = batP;
+    allValues[iValue++] = batM;
+
+    for (int l = 0; l < nLines; l++)
+    {
+        lamps_lit[l] = new(l < nLit, name: $"l{l}");
+        allValues[iValue++] = lamps_lit[l];
+
+        for (int x = 0; x < nWireSegments; x++)
+        {
+            lampWireVoltages[x, l] = new(name: $"U{x}_{l}");
+            allValues[iValue++] = lampWireVoltages[x, l];
+        }
+        wires[0, l] = new(batP, lampWireVoltages[0, l], name: $"w{0}_{l}");
+        allComponents[iComponent++] = wires[0, l];
+        for (int x = 1; x < nWireSegments; x++)
+        {
+            wires[x, l] = new(lampWireVoltages[x - 1, l], lampWireVoltages[x, l], name: $"w{x}_{l}");
+            allComponents[iComponent++] = wires[x, l];
+        }
+        lamps[l] = new(lampWireVoltages[nWireSegments - 1, l], batM, lamps_lit[l], name: $"l{l}");
+        allComponents[iComponent++] = lamps[l];
+    }
+
+    return new Graph(allValues, allComponents);
+}
+
 IEnumerable<Func<Graph>> graphGenerators;
 
 Console.WriteLine("0: AdderMultiplier (Assignment 6.1)");
@@ -94,8 +143,11 @@ Console.WriteLine("1: Electric Circuit (Assignment 6.3)");
 Console.WriteLine("2: Wire Test");
 Console.WriteLine("3: Lamp Test");
 Console.WriteLine("4: Switch Test");
+Console.WriteLine("5: Large scale test of parallel lamps with multiple wire segments in series");
 Console.Write("Select your test: ");
-switch(Console.ReadLine())
+
+int MAX_DISPLAYED_TOTAL_COUNT = 1000;
+switch (Console.ReadLine())
 {
     case "0":
         Console.WriteLine("m1, m2, m3, a1, a2");
@@ -118,23 +170,64 @@ switch(Console.ReadLine())
     case "4":
         graphGenerators = [SwitchTest];
         break;
+    case "5":
+        int nWireSegments, nLines, nLit;
+        do
+            Console.Write("# of wire segments per line: ");
+        while (!int.TryParse(Console.ReadLine(), out nWireSegments) || nWireSegments <= 0);
+        do
+            Console.Write("# of parallel lines: ");
+        while (!int.TryParse(Console.ReadLine(), out nLines) || nLines <= 0);
+        do
+            Console.Write("# of lit lamps: ");
+        while (!int.TryParse(Console.ReadLine(), out nLit) || nLit < 0 || nLit > nLines);
+        MAX_DISPLAYED_TOTAL_COUNT = 0;
+        graphGenerators = [() => BigTest(nWireSegments, nLines, nLit)];
+        break;
     default:
         return;
 }
+int maxCount;
+do
+    Console.Write("Max # of diagnoses: ");
+while (!int.TryParse(Console.ReadLine(), out maxCount) || maxCount < 0);
+
 
 var stopwatch = new System.Diagnostics.Stopwatch();
 stopwatch.Start();
-var solutions = Solver.Execute(graphGenerators, maxCount: 5);
+
+var solutions = Solver.Execute(graphGenerators, maxCount: maxCount, printProgress: true);
 stopwatch.Stop();
 
 Console.WriteLine($"Runtime: {stopwatch.ElapsedMilliseconds}ms");
-Console.WriteLine($"Showing {solutions.Count()}/{Solver.Execute(graphGenerators)
-.Count()} solutions");
+
+var totalCount = Solver.Execute(graphGenerators, maxCount: MAX_DISPLAYED_TOTAL_COUNT).Count();
+string totalText;
+if (solutions.Count() < maxCount)
+{
+    totalText = $"{solutions.Count()}";
+}
+else if (totalCount >= MAX_DISPLAYED_TOTAL_COUNT)
+{
+    totalText = "many";
+}
+else
+{
+    totalText = $"{totalCount}";
+}
+Console.WriteLine($"Showing {solutions.Count()}/{totalText} solutions");
+
+var componentNames = graphGenerators.First()().Components.Select(c => c.Name).ToArray();
+
+Console.WriteLine(string.Join("; ", componentNames));
 foreach ((var variants, var graphs) in solutions)
 {
-    Console.WriteLine(string.Join(", ", variants) + " => " + graphs.First().Likelyhood(variants));
+    Console.WriteLine(string.Join("; ", variants) + " => " + graphs.First().Likelyhood(variants));
     foreach (var graph in graphs)
     {
-        Console.WriteLine("        " + string.Join(", ", graph.Values.Select(x => x.ToString())));
+        Console.WriteLine("        " + string.Join("; ", graph.Values.Select(x => x.ToString())));
     }
 }
+
+Console.WriteLine("Press any key to continue...");
+Console.ReadKey();

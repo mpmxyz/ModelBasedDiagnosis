@@ -1,17 +1,25 @@
-﻿namespace AAI6
+﻿using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
+
+namespace AAI6
 {
     internal class Value<T> : IValue<T>
     {
+        private static readonly (IValue[], IComponent?) NoDependencies = ([], null);
+        private static readonly IList<T> EmptyDomain = ImmutableList.Create<T>();
 
         private T _value = default!;
         private readonly IList<T> _domain;
-        private readonly string name;
+        public string Name { get; }
 
-        public bool Assigned
+        public (IValue[], IComponent?)? Dependencies
         {
             get;
             private set;
-        } = false;
+        }
+
+        [MemberNotNullWhen(true, nameof(Dependencies))]
+        public bool Assigned => Dependencies != null;
 
         public IEnumerable<T> Domain => _domain;
 
@@ -19,70 +27,71 @@
 
         public Value(IEnumerable<T>? domain = null, string name = "")
         {
-            Assigned = false;
-            _domain = domain != null ? new List<T>(domain) : [];
-            this.name = name;
+            Dependencies = null;
+            _domain = domain != null ? new List<T>(domain) : EmptyDomain;
+            Name = name;
         }
 
         public Value(T value, string name = "")
         {
-            Assigned = true;
-            _domain = new List<T>();
+            Dependencies = NoDependencies;
+            _domain = EmptyDomain;
             _value = value;
-            this.name = name;
+            Name = name;
         }
 
         public void Clear()
         {
-            Assigned = false;
+            Dependencies = null;
         }
 
+        [MemberNotNullWhen(true, nameof(Dependencies))]
         public bool TryGet(out T value)
         {
             value = _value;
             return Assigned;
         }
 
-        public Result TrySet(T value)
+        public Result TrySet(T value, (IValue[], IComponent?)? dependencies)
         {
             if (Assigned)
             {
                 if (EqualityComparer<T>.Default.Equals(value, _value))
                 {
-                    return Result.NOOP;
+                    return Result.Noop.Instance;
                 }
                 else
                 {
-                    return Result.CONFLICT;
+                    return Result.Conflict.Create(Dependencies ?? NoDependencies, dependencies);
                 }
             }
             if (DomainSize > 0 && !_domain.Contains(value))
             {
-                return Result.CONFLICT;
+                return Result.Conflict.Create(dependencies ?? NoDependencies);
             }
             _value = value;
-            Assigned = true;
-            return Result.OK;
+            Dependencies = dependencies ?? NoDependencies;
+            return Result.Ok.Instance;
         }
 
         public Result TrySetByDomain(int domainIndex)
         {
-            return TrySet(_domain[domainIndex]);
+            return TrySet(_domain[domainIndex], NoDependencies);
         }
 
         public Result TrySetFrom(IValue other)
         {
             if (other is IValue<T> o && o.TryGet(out var v)) {
-                return TrySet(v);
+                return TrySet(v, other.Dependencies);
             }
-            return Result.NOOP;
+            return Result.Noop.Instance;
         }
 
         public override string ToString()
         {
-            if (name.Any())
+            if (Name.Length != 0)
             {
-                return $"{name}={(Assigned ? _value : " / ")}";
+                return $"{Name}={(Assigned ? _value : " / ")}";
             }
             else
             {

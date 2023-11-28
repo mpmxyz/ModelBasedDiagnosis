@@ -4,10 +4,10 @@
     {
         public IEnumerable<IValue> Values { get; } = values;
         public IEnumerable<IComponent> Components { get; } = components;
-        private IDictionary<IComponent, uint> componentIndices = components
-            .Select((v, i) => (v, (uint)i))
+        private readonly IDictionary<IComponent, uint> componentIndices = components
+            .Select((c, i) => (c, (uint)i))
             .ToDictionary();
-        private IDictionary<IValue, IEnumerable<IComponent>> componentsOfValues = AnalyzeValueComponents(values, components);
+        private readonly Dictionary<IValue, IEnumerable<IComponent>> componentsOfValues = AnalyzeValueComponents(values, components);
 
         public float Likelyhood(uint[] variants)
         {
@@ -26,6 +26,8 @@
             return componentIndices[component];
         }
 
+        public uint[] VariantCounts => Components.Select(c => c.VariantCount).ToArray();
+
         public IEnumerable<IComponent> GetComponentsWithValue(IValue value) {
             if (componentsOfValues.TryGetValue(value, out var components))
             {
@@ -34,7 +36,7 @@
             return Enumerable.Empty<IComponent>();
         }
 
-        private static IDictionary<IValue, IEnumerable<IComponent>> AnalyzeValueComponents(IEnumerable<IValue> values, IEnumerable<IComponent> components)
+        private static Dictionary<IValue, IEnumerable<IComponent>> AnalyzeValueComponents(IEnumerable<IValue> values, IEnumerable<IComponent> components)
         {
             var result = new Dictionary<IValue, IEnumerable<IComponent>>();
             foreach (var value in values)

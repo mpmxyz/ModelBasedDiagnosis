@@ -12,32 +12,61 @@
             }
         }
 
-        public static IEnumerable<(uint[], IEnumerable<Graph>)> Execute(IEnumerable<Func<Graph>> graphGenerators, int maxCount = int.MaxValue)
+        public static IEnumerable<(uint[], IEnumerable<Graph>)> Execute(IEnumerable<Func<Graph>> graphGenerators, int maxCount = int.MaxValue, bool printProgress = false)
         {
             var initialGraph = graphGenerators.First()();
             var variantsQueue = new VariantsQueue(initialGraph);
             var result = new List<(uint[], IEnumerable<Graph>)>();
+            var knownConflicts = new VariantsTrie(initialGraph.VariantCounts);
+
+            int checkCount = 0;
+
+            void PrintProgress()
+            {
+                Console.CursorLeft = 0;
+                Console.Write($"Found: {result!.Count}, Checked: {checkCount}");
+            }
 
             while (variantsQueue.HasItems())
             {
                 var variants = variantsQueue.Dequeue();
                 var graphs = new List<Graph>();
-                bool valid = true;
-                foreach (var newGraph in graphGenerators)
+                int[]? conflictPattern = knownConflicts.Get(variants);
+                checkCount++;
+                if (conflictPattern == null)
                 {
-                    valid &= FillGraph(newGraph, variants, out var graph);
-                    if (valid)
+                    //Console.WriteLine($"conflict2  {string.Join(", ", variants)}");
+                    foreach (var newGraph in graphGenerators)
                     {
-                        graphs.Add(graph);
-                    }
-                    else
-                    {
-                        break;
+                        conflictPattern = FillGraph(newGraph, variants, out var graph);
+                        if (conflictPattern != null)
+                        {
+                            //Console.WriteLine($"conflict   {string.Join(", ", conflictPattern)}");
+                            knownConflicts.Add(conflictPattern);
+                            break;
+                        }
+                        else
+                        {
+                            graphs.Add(graph);
+                        }
                     }
                 }
-                if (valid)
+                if (printProgress)
                 {
+                    PrintProgress();
+                }
+                if (conflictPattern == null)
+                {
+                    //Console.WriteLine($"conflict   {string.Join(", ", variants)}");
+
+                    variantsQueue.AddPreferred(variants);
                     result.Add((variants, graphs));
+
+                    if (printProgress)
+                    {
+                        PrintProgress();
+                    }
+
                     if (result.Count >= maxCount)
                     {
                         break;
@@ -45,8 +74,7 @@
                 }
                 else
                 {
-                    //Console.WriteLine(string.Join(", ", variants) + " /// " + string.Join(", ", graph.Values.Select(x => x.ToString())) + " => XXX");
-                    variantsQueue.EnqueueDescendantsOf(variants);
+                    variantsQueue.EnqueueDescendantsOf(variants, conflictPattern);
                 }
             }
             //start with variants 0
@@ -56,25 +84,40 @@
             //  trying domain values -> CloneGraph
             //all noop -> valid solution found
             //conflict -> split to increment a variant each -> CloneVariants
-
+            if (printProgress)
+            {
+                PrintProgress();
+                Console.WriteLine(" Done!");
+            }
             return result;
         }
 
-        static bool FillGraph(Func<Graph> newGraph, uint[] variants, out Graph graph)
+        static int[]? FillGraph(
+            Func<Graph> newGraph,
+            uint[] variants,
+            out Graph graph
+        )
         {
             var processedValues = new HashSet<IValue>();
             var touchedValues = new HashSet<IValue>();
             var dirtyComponents = new HashSet<IComponent>();
-            return FillGraph(newGraph, variants, out graph, processedValues, touchedValues, dirtyComponents);
+            return FillGraph(
+                newGraph,
+                variants,
+                out graph,
+                processedValues,
+                touchedValues,
+                dirtyComponents
+            );
         }
 
-        static bool FillGraph(
+        static int[]? FillGraph(
             Func<Graph> newGraph,
             uint[] variants,
             out Graph graph,
-            ISet<IValue> processedValues,
-            ISet<IValue> touchedValues,
-            ISet<IComponent> dirtyComponents
+            HashSet<IValue> processedValues,
+            HashSet<IValue> touchedValues,
+            HashSet<IComponent> dirtyComponents
         )
         {
             graph = newGraph();
@@ -112,14 +155,14 @@
 
                     switch (result)
                     {
-                        case Result.OK:
+                        case Result.Ok:
                             foreach (var value in component.ConnectedValues)
                             {
                                 touchedValues.Add(value);
                             }
                             break;
-                        case Result.CONFLICT:
-                            return false;
+                        case Result.Conflict conflict:
+                            return GetConflictPattern(variants, graph, conflict);
                     }
                 }
             }
@@ -128,7 +171,46 @@
             //TODO: speculatively assign unknown values
             //optimization: focus on values connected to nodes with the least amount of unknowns
             //no unassigned values: success
-            return true;
+            return null;
+        }
+
+        private static int[] GetConflictPattern(uint[] variants, Graph graph, Result.Conflict conflict)
+        {
+            int[] conflictVariants = new int[graph.Components.Count()];
+            for (int i = 0; i < conflictVariants.Length; i++)
+            {
+                conflictVariants[i] = -1;
+            }
+            HashSet<IValue> knownValues = [];
+            List<(IValue[] values, IComponent? component)> sources = [conflict.Source, conflict.Source2];
+
+            void AddComponentCandidate(IComponent? component)
+            {
+                if (component != null)
+                {
+                    uint index = graph.IndexOf(component);
+                    conflictVariants[index] = (int) variants[index];
+                }
+            }
+            void ProcessSource((IValue[] values, IComponent? component) source)
+            {
+                AddComponentCandidate(source.component);
+                foreach (var value in source.values)
+                {
+                    var deps = value.Dependencies;
+                    if (knownValues.Add(value) && deps != null)
+                    {
+                        sources.Add(((IValue[], IComponent?)) deps);
+                    }
+                }
+            }
+
+            for (int i = 0; i < sources.Count; i++)
+            {
+                ProcessSource(sources[i]);
+            }
+
+            return conflictVariants;
         }
     }
 }

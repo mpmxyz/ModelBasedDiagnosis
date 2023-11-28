@@ -1,18 +1,44 @@
 ﻿using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 
 namespace AAI6
 {
     internal class VariantsQueue
     {
+        private static readonly EqualityComparer<uint[]> variantsEqualityComparer = new VariantsEqualityComparer();
+
+        private class VariantsEqualityComparer : EqualityComparer<uint[]>
+        {
+            public override bool Equals(uint[]? x, uint[]? y)
+            {
+                if (x == y) return true;
+                if (x == null || y == null) return false;
+                if (x.Length != y.Length) return false;
+                for (int i = 0; i < x.Length; i++)
+                {
+                    if (x[i] != y[i]) return false;
+                }
+                return true;
+            }
+
+            public override int GetHashCode([DisallowNull] uint[] obj)
+            {
+                int hashcode = 0;
+                if (obj != null)
+                {
+                    foreach (var x in obj)
+                    {
+                        hashcode = HashCode.Combine(hashcode, x);
+                    }
+                }
+                return hashcode;
+            }
+        }
+
         private readonly Graph templateGraph;
-        private readonly PriorityQueue<uint[], (uint[], float)> queue =
-            new PriorityQueue<uint[], (uint[], float)>(new VariantsComparer());
-        private readonly ISet<uint[]> known = new HashSet<uint[]>(
-            EqualityComparer<uint[]>.Create(
-                StructuralComparisons.StructuralEqualityComparer.Equals,
-                StructuralComparisons.StructuralEqualityComparer.GetHashCode
-            )
-        );
+        private readonly PriorityQueue<uint[], (uint[], float)> queue = new(new VariantsComparer());
+        private readonly HashSet<uint[]> knownVariants = new(variantsEqualityComparer);
+        private readonly HashSet<uint[]> suppressedByPreferred = new(variantsEqualityComparer);
 
         public VariantsQueue(Graph initialGraph)
         {
@@ -20,58 +46,43 @@ namespace AAI6
             Enqueue(new uint[initialGraph.Components.Count()]);
         }
 
-        private class VariantsComparer : IComparer<(uint[] variants, float likelyhood)>
+        public int KnownCount => knownVariants.Count;
+
+        /// <summary>
+        /// suppresses all descendants of the given list of variants<br/>
+        /// This method must be called latest after dequeueing <paramref name="preferred"/> and before the next call of <see cref="Dequeue"/>
+        /// </summary>
+        /// <param name="preferred">preferred (and necessarily conflict free!) variants</param>
+        public void AddPreferred(uint[] preferred)
         {
-            public int Compare((uint[] variants, float likelyhood) x, (uint[] variants, float likelyhood) y)
+            for (int i = 0; i < preferred.Length; i++)
             {
-                bool xLessOrEqual = true, yLessOrEqual = true;
-                for (int i = 0; i < x.variants.Length; i++)
-                {
-                    uint xVar = x.variants[i], yVar = y.variants[i];
-                    if (xVar > yVar)
-                    {
-                        xLessOrEqual = false;
-                    }
-                    else if (xVar < yVar)
-                    {
-                        yLessOrEqual = false;
-                    }
-                }
-                if (xLessOrEqual && !yLessOrEqual)
-                {
-                    return -1;
-                }
-                else if (!xLessOrEqual && yLessOrEqual)
-                {
-                    return +1;
-                }
-                if (x.likelyhood > y.likelyhood)
-                {
-                    return -1; //x more likely than y -> x is prioritized to/smaller than y
-                }
-                else if (x.likelyhood < y.likelyhood)
-                {
-                    return +1; //y more likely than x -> y is prioritized to/smaller than x
-                }
-                return 0;
+                var suppressed = (uint[]) preferred.Clone();
+                suppressed[i]++;
+                suppressedByPreferred.Add(suppressed);
+                //TODO: does suppression persist through layer of conflict when it neighbors a parallel conflict?
             }
         }
-
 
         public void Enqueue(uint[] variants)
         {
-            if (known.Add(variants))
+            if (knownVariants.Add(variants))
             {
+                // Console.WriteLine($"added      {string.Join(", ", variants)}");
                 queue.Enqueue(variants, (variants, templateGraph.Likelyhood(variants)));
+            }
+            else
+            {
+                //Console.WriteLine($"duplicated {string.Join(", ", variants)}");
             }
         }
 
-        public void EnqueueDescendantsOf(uint[] variants)
+        public void EnqueueDescendantsOf(uint[] variants, int[] conflictPattern)
         {
             int i = 0;
             foreach (var component in templateGraph.Components)
             {
-                if (variants[i] + 1 < component.VariantCount)
+                if (variants[i] + 1 < component.VariantCount && conflictPattern[i] != -1)
                 {
                     var copy = (uint[]) variants.Clone();
                     copy[i]++;
@@ -83,12 +94,32 @@ namespace AAI6
 
         public uint[] Dequeue()
         {
-            return queue.Dequeue();
+            var result = queue.Dequeue();
+            DequeueNonPreferred();
+            return result;
         }
 
         public bool HasItems()
         {
             return queue.Count > 0; 
+        }
+
+        public uint[] Peek()
+        {
+            return queue.Peek();
+        }
+
+        private void DequeueNonPreferred() {
+            int x = 0;
+            while (queue.Count > 0 && suppressedByPreferred.Contains(queue.Peek()))
+            {
+                //Console.WriteLine($"suppressed {string.Join(", ", queue.Peek())}");
+                //make sure that decendants are also non-preferred
+                AddPreferred(queue.Dequeue());
+                x++;
+                Console.CursorLeft = 0;
+                Console.Write($"{x}");
+            }
         }
     }
 }
