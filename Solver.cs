@@ -15,16 +15,17 @@
         public static IEnumerable<(uint[], IEnumerable<Graph>)> Execute(IEnumerable<Func<Graph>> graphGenerators, int maxCount = int.MaxValue, bool printProgress = false)
         {
             var initialGraph = graphGenerators.First()();
-            var variantsQueue = new VariantsQueue(initialGraph);
             var result = new List<(uint[], IEnumerable<Graph>)>();
+            //var knownConflicts = new SparseVariantPatternSet()
             var knownConflicts = new VariantsTrie(initialGraph.VariantCounts);
+            var variantsQueue = new VariantsQueue(initialGraph);
 
-            int checkCount = 0;
+            int checkCount = 0, conflictCount = 0;
 
             void PrintProgress()
             {
                 Console.CursorLeft = 0;
-                Console.Write($"Found: {result!.Count}, Checked: {checkCount}");
+                Console.Write($"Found: {result!.Count}, Checked: {checkCount}, Known conflicts: {conflictCount}");
             }
 
             while (variantsQueue.HasItems())
@@ -43,6 +44,7 @@
                         {
                             //Console.WriteLine($"conflict   {string.Join(", ", conflictPattern)}");
                             knownConflicts.Add(conflictPattern);
+                            conflictCount++;
                             break;
                         }
                         else

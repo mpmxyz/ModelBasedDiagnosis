@@ -218,7 +218,7 @@ else
 Console.WriteLine($"Showing {solutions.Count()}/{totalText} solutions");
 
 var componentNames = graphGenerators.First()().Components.Select(c => c.Name).ToArray();
-
+int max = 30;
 Console.WriteLine(string.Join("; ", componentNames));
 foreach ((var variants, var graphs) in solutions)
 {
@@ -227,6 +227,7 @@ foreach ((var variants, var graphs) in solutions)
     {
         Console.WriteLine("        " + string.Join("; ", graph.Values.Select(x => x.ToString())));
     }
+    if (max-- <= 0) break;
 }
 
 Console.WriteLine("Press any key to continue...");

@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 
 namespace AAI6
 {
@@ -88,23 +87,17 @@ namespace AAI6
 
         public uint[] Dequeue()
         {
-            var result = queue.Dequeue();
             DequeueNonPreferred();
-            return result;
+            return queue.Dequeue();
         }
 
         public bool HasItems()
         {
+            DequeueNonPreferred();
             return queue.Count > 0; 
         }
 
-        public uint[] Peek()
-        {
-            return queue.Peek();
-        }
-
         private void DequeueNonPreferred() {
-            int x = 0;
             while (queue.Count > 0 && IsSuppressed(queue.Peek()))
             {
                 //Console.WriteLine($"suppressed {string.Join(", ", queue.Peek())}");
